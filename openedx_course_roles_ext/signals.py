@@ -8,6 +8,7 @@ Limited Staff, Staff and Instructor roles upon enrollment.
 
 from venv import logger
 from django.db.models.signals import post_save, post_delete
+from django.db import transaction
 from django.dispatch import receiver
 
 from common.djangoapps.student.models import CourseAccessRole
@@ -18,8 +19,9 @@ from common.djangoapps.student.roles import (
     CourseDataResearcherRole,
 )
 
-from openedx.core.djangoapps.django_comment_common.models import assign_role as comment_assign_role, Role as CommentRole
-from openedx.core.djangoapps.django_comment_common.utils import seed_permissions_roles as comment_seed_permissions_roles, are_permissions_roles_seeded as comment_are_permissions_roles_seeded
+from openedx.core.djangoapps.django_comment_common.models import Role as CommentRole
+
+from openedx_course_roles_ext.tasks import ensure_discussion_admin_for_course_role
 
 TRIGGER_ROLES = {
     CourseInstructorRole.ROLE,   # 'instructor'
@@ -46,6 +48,9 @@ def auto_add_data_researcher(sender, instance, created, **kwargs):
     """
     When a user is added as Limited Staff / Staff / Instructor for a course,
     make sure they also get Course Data Researcher for that same course.
+
+    Use transaction.on_commit so the derived role is created only after the
+    trigger role row is committed (import/rerun friendly).
     """
     if not created:
         return
@@ -53,24 +58,36 @@ def auto_add_data_researcher(sender, instance, created, **kwargs):
     if not _is_course_team_role(instance):
         return
 
-    # Already has the data researcher role for this course?
-    exists = CourseAccessRole.objects.filter(
-        user=instance.user,
-        course_id=instance.course_id,
-        role=DATA_RESEARCHER_ROLE,
-    ).exists()
+    user_id = instance.user.id
+    course_id = instance.course_id
+    org = instance.org
+    trigger_role = instance.role
 
-    if not exists:
+    def _ensure_data_researcher():
+        # Re-check inside on_commit (idempotent)
+        exists = CourseAccessRole.objects.filter(
+            user_id=user_id,
+            course_id=course_id,
+            role=DATA_RESEARCHER_ROLE,
+        ).exists()
+
+        if exists:
+            return
+
         logger.info(
-            f"Auto-adding Course Data Researcher role for user {instance.user.id} "
-            f"in course {instance.course_id} due to assignment of role {instance.role}."
+            "Auto-adding Course Data Researcher role for user %s in course %s due to assignment of role %s.",
+            user_id,
+            course_id,
+            trigger_role,
         )
         CourseAccessRole.objects.create(
-            user=instance.user,
-            course_id=instance.course_id,
+            user_id=user_id,
+            course_id=course_id,
             role=DATA_RESEARCHER_ROLE,
-            org=instance.org,  # mirror whatever org is on the course-level role
+            org=org,  # mirror whatever org is on the course-level role
         )
+
+    transaction.on_commit(_ensure_data_researcher)
 
 
 @receiver(post_delete, sender=CourseAccessRole)
@@ -113,32 +130,28 @@ def auto_add_discussion_admin(sender, instance, created, **kwargs):
     This is needed to ensure that course team members have proper permissions
     when viewing course discussions as well as
     `Instructor Dashboard > Gradebook > Filter > Cohort` dropdown is selectable.
+
+    This is Celery queued async because discussion role seeding may hit modulestore,
+    which may not be ready yet during imports/creation timing.
     """
     if not created:
         return
 
     if not _is_course_team_role(instance):
         return
+    
+    course_id_str = str(instance.course_id)
 
-    # Already has the Discussion Admin role for this course?
-    exists = CommentRole.user_has_role_for_course(
-        instance.user,
-        instance.course_id,
-        "Administrator",
-    )
+    # Queue AFTER the DB transaction commits so the triggering row truly exists.
+    def _enqueue():
+        logger.info("Enqueuing ensure_discussion_admin_for_course_role user=%s course=%s", instance.user.id, course_id_str)
 
-    if not exists:
-        logger.info(
-            f"Auto-adding Discussion Admin role for user {instance.user.id} "
-            f"in course {instance.course_id} due to assignment of role {instance.role}."
+        ensure_discussion_admin_for_course_role.delay(
+            user_id=instance.user.id,
+            course_id_str=course_id_str,
         )
 
-        # Ensure discussion roles exist for this course (only needed once per course)
-        if not comment_are_permissions_roles_seeded(str(instance.course_id)):
-            comment_seed_permissions_roles(instance.course_id)
-
-        # Assign Discussion Admin
-        comment_assign_role(instance.course_id, instance.user, "Administrator")
+    transaction.on_commit(_enqueue)
 
 
 @receiver(post_delete, sender=CourseAccessRole)
