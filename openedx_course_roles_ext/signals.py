@@ -21,7 +21,10 @@ from common.djangoapps.student.roles import (
 
 from openedx.core.djangoapps.django_comment_common.models import Role as CommentRole
 
+
 from openedx_course_roles_ext.tasks import ensure_discussion_admin_for_course_role
+from openedx_course_roles_ext.utils.discussion_roles import dedupe_forum_role
+
 
 TRIGGER_ROLES = {
     CourseInstructorRole.ROLE,   # 'instructor'
@@ -159,6 +162,8 @@ def auto_remove_discussion_admin(sender, instance, **kwargs):
     """
     When a Limited Staff / Staff / Instructor role is removed from a course, and the user
     no longer has *any* of those roles for that course, remove Course Discussion Admin.
+
+    IMPORTANT: Do NOT delete the CommentRole row — it is course-level and shared.
     """
     if not _is_course_team_role(instance):
         return
@@ -174,14 +179,24 @@ def auto_remove_discussion_admin(sender, instance, **kwargs):
         return
 
     # Safe to remove Discussion Admin for this course
+    course_id_str = str(instance.course_id)
+
     logger.info(
-        f"Auto-removing Discussion Admin role for user {instance.user.id} "
-        f"in course {instance.course_id} due to removal of role {instance.role}."
+        "Auto-removing Discussion Admin membership for user=%s course=%s (trigger role removed=%s)",
+        instance.user.id,
+        course_id_str,
+        instance.role,
     )
 
-    # Remove Discussion Admin
-    CommentRole.objects.filter(
-        users=instance.user,
-        course_id=instance.course_id,
-        name__in=["Administrator"],
-    ).delete()
+    # If duplicates exist, merge + keep one (prevents MultipleObjectsReturned during seeding)
+    dedupe_forum_role(course_id_str, "Administrator")
+
+    # IMPORTANT: remove membership only; never delete the course Role row
+    for role in CommentRole.objects.filter(course_id=course_id_str, name="Administrator"):
+        role.users.remove(instance.user)
+        logger.info(
+            "Removed user=%s from Discussion Admin role_id=%s course=%s",
+            instance.user.id,
+            role.id,
+            course_id_str,
+        )
