@@ -2,10 +2,12 @@
 openedx_course_roles_ext Django application initialization.
 """
 
-from django.apps import AppConfig
 import logging
 
+from django.apps import AppConfig
+
 logger = logging.getLogger(__name__)
+
 
 class OpenedxCourseRolesExtConfig(AppConfig):
     """
@@ -20,6 +22,6 @@ class OpenedxCourseRolesExtConfig(AppConfig):
         """
         Import signal handlers to ensure they are registered.
         """
-        from . import signals
+        from . import signals  # pylint: disable=import-outside-toplevel,unused-import
 
         logger.info("openedx_course_roles_ext application is ready.")

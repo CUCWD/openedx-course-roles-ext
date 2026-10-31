@@ -1,7 +1,10 @@
+"""Helpers for maintaining unique course discussion roles."""
+
 from __future__ import annotations
 
-from openedx.core.djangoapps.django_comment_common.models import Role as CommentRole
 from venv import logger
+
+from openedx.core.djangoapps.django_comment_common.models import Role as CommentRole
 
 
 def dedupe_forum_role(course_id_str: str, role_name: str) -> None:

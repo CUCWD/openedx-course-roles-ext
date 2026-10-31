@@ -32,12 +32,15 @@ Please see the Open edX documentation for `guidance on Python development`_ in t
 Deploying
 *********
 
-TODO: How can a new user go about deploying this component? Is it just a few
-commands? Is there a larger how-to that should be linked here?
+Install this plugin into an existing Ulmo edx-platform environment. Runtime
+requirements are deliberately unpinned so the platform controls Django, Celery,
+and edx-opaque-keys versions. Apply the platform's dependency constraints when
+installing or upgrading the plugin.
 
-PLACEHOLDER: For details on how to deploy this component, see the `deployment how-to`_.
-
-.. _deployment how-to: https://docs.openedx.org/projects/openedx-course-roles-ext/how-tos/how-to-deploy-this-component.html
+The ``requirements/base.txt`` file forwards to the unpinned runtime declarations.
+The other requirements files are for isolated development and CI environments;
+do not install them into the platform environment. Atlas is development-only
+translation tooling.
 
 Getting Help
 ************

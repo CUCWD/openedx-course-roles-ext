@@ -7,29 +7,26 @@ Limited Staff, Staff and Instructor roles upon enrollment.
 """
 
 from venv import logger
-from django.db.models.signals import post_save, post_delete
-from django.db import transaction
-from django.dispatch import receiver
 
 from common.djangoapps.student.models import CourseAccessRole
 from common.djangoapps.student.roles import (
-    CourseInstructorRole,
-    CourseStaffRole,
-    CourseLimitedStaffRole,
     CourseDataResearcherRole,
+    CourseInstructorRole,
+    CourseLimitedStaffRole,
+    CourseStaffRole,
 )
-
+from django.db import transaction
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 from openedx.core.djangoapps.django_comment_common.models import Role as CommentRole
-
 
 from openedx_course_roles_ext.tasks import ensure_discussion_admin_for_course_role
 from openedx_course_roles_ext.utils.discussion_roles import dedupe_forum_role
 
-
 TRIGGER_ROLES = {
     CourseInstructorRole.ROLE,   # 'instructor'
     CourseStaffRole.ROLE,        # 'staff'
-    CourseLimitedStaffRole.ROLE, # 'limited_staff'
+    CourseLimitedStaffRole.ROLE,  # 'limited_staff'
 }
 
 DATA_RESEARCHER_ROLE = CourseDataResearcherRole.ROLE  # 'data_researcher'
@@ -37,7 +34,7 @@ DATA_RESEARCHER_ROLE = CourseDataResearcherRole.ROLE  # 'data_researcher'
 
 def _is_course_team_role(instance: CourseAccessRole) -> bool:
     """
-    True if this CourseAccessRole is a *course-level* instructor/staff/limited_staff role.
+    Return whether this is a course-level instructor, staff, or limited staff role.
 
     In the classic CourseAccessRole model:
       - course-level: course_id is set (and org usually set)
@@ -47,10 +44,9 @@ def _is_course_team_role(instance: CourseAccessRole) -> bool:
 
 
 @receiver(post_save, sender=CourseAccessRole)
-def auto_add_data_researcher(sender, instance, created, **kwargs):
+def auto_add_data_researcher(sender, instance, created, **kwargs):  # pylint: disable=unused-argument
     """
-    When a user is added as Limited Staff / Staff / Instructor for a course,
-    make sure they also get Course Data Researcher for that same course.
+    Assign Course Data Researcher when a user joins the course team.
 
     Use transaction.on_commit so the derived role is created only after the
     trigger role row is committed (import/rerun friendly).
@@ -94,10 +90,9 @@ def auto_add_data_researcher(sender, instance, created, **kwargs):
 
 
 @receiver(post_delete, sender=CourseAccessRole)
-def auto_remove_data_researcher(sender, instance, **kwargs):
+def auto_remove_data_researcher(sender, instance, **kwargs):  # pylint: disable=unused-argument
     """
-    When a Limited Staff / Staff / Instructor role is removed from a course, and the user
-    no longer has *any* of those roles for that course, remove Course Data Researcher.
+    Remove Course Data Researcher when a user leaves the course team.
     """
     if not _is_course_team_role(instance):
         return
@@ -125,10 +120,9 @@ def auto_remove_data_researcher(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=CourseAccessRole)
-def auto_add_discussion_admin(sender, instance, created, **kwargs):
+def auto_add_discussion_admin(sender, instance, created, **kwargs):  # pylint: disable=unused-argument
     """
-    When a user is added as Limited Staff / Staff / Instructor for a course,
-    make sure they also get Discussion Admins for that same course.
+    Assign Discussion Admin when a user joins the course team.
 
     This is needed to ensure that course team members have proper permissions
     when viewing course discussions as well as
@@ -142,12 +136,16 @@ def auto_add_discussion_admin(sender, instance, created, **kwargs):
 
     if not _is_course_team_role(instance):
         return
-    
+
     course_id_str = str(instance.course_id)
 
     # Queue AFTER the DB transaction commits so the triggering row truly exists.
     def _enqueue():
-        logger.info("Enqueuing ensure_discussion_admin_for_course_role user=%s course=%s", instance.user.id, course_id_str)
+        logger.info(
+            "Enqueuing ensure_discussion_admin_for_course_role user=%s course=%s",
+            instance.user.id,
+            course_id_str,
+        )
 
         ensure_discussion_admin_for_course_role.delay(
             user_id=instance.user.id,
@@ -158,10 +156,9 @@ def auto_add_discussion_admin(sender, instance, created, **kwargs):
 
 
 @receiver(post_delete, sender=CourseAccessRole)
-def auto_remove_discussion_admin(sender, instance, **kwargs):
+def auto_remove_discussion_admin(sender, instance, **kwargs):  # pylint: disable=unused-argument
     """
-    When a Limited Staff / Staff / Instructor role is removed from a course, and the user
-    no longer has *any* of those roles for that course, remove Course Discussion Admin.
+    Remove Discussion Admin when a user leaves the course team.
 
     IMPORTANT: Do NOT delete the CommentRole row — it is course-level and shared.
     """

@@ -1,7 +1,5 @@
-# Core requirements for using this application
--c constraints.txt
-
-Django>=4.0,<5.0             # Web application framework (4.2.19 is sumac, 4.2.20 is teak)
-
-
-openedx-atlas
+# Runtime dependencies are supplied by edx-platform.
+# Keep these unpinned so the host platform controls shared package versions.
+Django
+celery
+edx-opaque-keys

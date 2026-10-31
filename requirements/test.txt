@@ -4,6 +4,8 @@
 #
 #    pip-compile test.in
 #
+# Django is intentionally omitted; tox selects the version for each test environment.
+#
 asgiref==3.11.0
     # via
     #   -r /openedx/src/openedx-course-roles-ext/requirements/base.txt
@@ -14,10 +16,6 @@ code-annotations==2.3.0
     # via -r test.in
 coverage[toml]==7.12.0
     # via pytest-cov
-django==4.2.27
-    # via
-    #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
-    #   -r /openedx/src/openedx-course-roles-ext/requirements/base.txt
 iniconfig==2.3.0
     # via pytest
 jinja2==3.1.6

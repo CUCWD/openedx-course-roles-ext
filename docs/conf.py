@@ -44,6 +44,9 @@ VERSION = get_version('../openedx_course_roles_ext', '__init__.py')
 os.environ['DJANGO_SETTINGS_MODULE'] = 'test_settings'
 django_setup()
 
+# edx-platform supplies these modules in production; mock them only for autodoc.
+autodoc_mock_imports = ['common', 'openedx', 'xmodule']
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -517,8 +520,8 @@ epub_exclude_files = ['search.html']
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3.11.8', None),
-    'django': ('https://docs.djangoproject.com/en/4.2/', 'https://docs.djangoproject.com/en/3.2/_objects/'),
+    'python': ('https://docs.python.org/3.11', None),
+    'django': ('https://docs.djangoproject.com/en/4.2/', 'https://docs.djangoproject.com/en/4.2/_objects/'),
     'model_utils': ('https://django-model-utils.readthedocs.io/en/latest/', None),
 }
 

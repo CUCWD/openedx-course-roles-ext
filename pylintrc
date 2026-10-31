@@ -355,6 +355,7 @@ generated-members =
 	name,
 	revision,
 	_meta,
+ignored-modules = common,openedx,xmodule
 
 [VARIABLES]
 init-import = no
@@ -387,4 +388,4 @@ int-import-graph =
 [EXCEPTIONS]
 overgeneral-exceptions = builtins.Exception
 
-# 79853056a08a5009db4a6e9a8ca00c194036ac5a
+# 0b1343da4d0a79a4949755c5bcf5d4950ca96b01
