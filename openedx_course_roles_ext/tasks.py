@@ -1,33 +1,31 @@
+"""Celery tasks for assigning course discussion roles."""
+
 from __future__ import annotations
+
+from venv import logger
 
 from celery import shared_task
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.http import Http404
-
 from opaque_keys.edx.keys import CourseKey
+from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
+from openedx.core.djangoapps.django_comment_common.models import Role as CommentRole
+from openedx.core.djangoapps.django_comment_common.models import assign_role as comment_assign_role
+from openedx.core.djangoapps.django_comment_common.utils import \
+    are_permissions_roles_seeded as comment_are_permissions_roles_seeded
+from openedx.core.djangoapps.django_comment_common.utils import seed_permissions_roles as comment_seed_permissions_roles
+from openedx.core.lib.courses import get_course_by_id
 from xmodule.modulestore.exceptions import ItemNotFoundError
 
-from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
-from openedx.core.lib.courses import get_course_by_id
-
-from openedx.core.djangoapps.django_comment_common.models import (
-    assign_role as comment_assign_role,
-    Role as CommentRole,
-)
-from openedx.core.djangoapps.django_comment_common.utils import (
-    are_permissions_roles_seeded as comment_are_permissions_roles_seeded,
-    seed_permissions_roles as comment_seed_permissions_roles,
-)
-
 from openedx_course_roles_ext.utils.discussion_roles import dedupe_forum_role
-from venv import logger
 
 
 def _backoff_seconds(attempt: int) -> int:
     """
-    Exponential-ish backoff, capped.
-    attempt starts at 1.
+    Return capped exponential backoff.
+
+    The attempt count starts at 1.
     """
     # 30, 60, 120, 240, 480, 600, 600, ...
     return min(30 * (2 ** max(attempt - 1, 0)), 600)

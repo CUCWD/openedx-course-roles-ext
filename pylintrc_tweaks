@@ -9,3 +9,7 @@ disable+=
     django-not-configured,
     consider-using-with,
     bad-option-value,
+
+[TYPECHECK]
+# These modules are provided by the host edx-platform checkout.
+ignored-modules=common,openedx,xmodule
